@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Outfit', 'Inter', sans-serif;
+  
+  --color-brand-orange: #f97316;
+  --color-brand-orange-hover: #ea580c;
+  --color-brand-violet: #7c3aed;
+  --color-brand-violet-hover: #6d28d9;
+  
+  --animate-float-glow: float-glow 14s ease-in-out infinite alternate;
+  --animate-float-glow-alt: float-glow-alt 16s ease-in-out infinite alternate;
+
+  @keyframes float-glow {
+    0% { transform: translateY(0px) scale(1); }
+    100% { transform: translateY(40px) scale(1.1); }
+  }
+  @keyframes float-glow-alt {
+    0% { transform: translateY(0px) scale(1); }
+    100% { transform: translateY(-30px) scale(1.05); }
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Background glowing orange circles */
+.bg-glow-circle {
+  position: fixed;
+  top: -10%;
+  right: 5%;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.18) 0%, rgba(249, 115, 22, 0.05) 50%, transparent 80%);
+  filter: blur(80px);
+  z-index: -1;
+  pointer-events: none;
+  animation: float-glow 14s ease-in-out infinite alternate;
+}
+
+.bg-glow-circle.bottom {
+  top: unset;
+  right: unset;
+  bottom: -15%;
+  left: 5%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.03) 50%, transparent 80%);
+  animation: float-glow-alt 16s ease-in-out infinite alternate;
+}
+
+/* iframe Scrollbar hiding and clipping overrides */
+.card-iframe-container {
+  height: 200px;
+  width: 100%;
+  background: #020617;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-iframe-container iframe {
+  width: calc(100% + 18px);
+  height: calc(100% + 18px);
+  margin-right: -18px;
+  margin-bottom: -18px;
+  border: none;
+  background: transparent;
+  scrollbar-width: none; /* Firefox */
+}
+
+.card-iframe-container iframe::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera, newer Edge */
+}
+
+/* Lock overlay to catch dragging/clicking unless interactively scrolling inside container */
+.iframe-scroll-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: linear-gradient(to bottom, rgba(7, 10, 19, 0.8), transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.iframe-scroll-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(15, 20, 36, 0.85);
+  color: #94a3b8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
