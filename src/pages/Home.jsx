@@ -35,14 +35,14 @@ export default function Home() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   // Fetch all categories once
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await api.get('/categories');
       setCategories(res.data.categories || []);
     } catch (err) {
       console.error('Error fetching categories:', err);
     }
-  };
+  }, []);
 
   // Fetch cards based on filters, search query, page
   const fetchCards = useCallback(async () => {
@@ -74,6 +74,7 @@ export default function Home() {
     }
   }, [activeCatId, activeSubCatId, activeSubSubCatId, searchQuery, page, showFavoritesOnly, favorites, limit]);
 
+  // On mount: fetch categories AND cards in parallel for fastest first load
   useEffect(() => {
     fetchCategories();
 
@@ -82,11 +83,20 @@ export default function Home() {
     };
     window.addEventListener('resetHomeFilters', handleReset);
     return () => window.removeEventListener('resetHomeFilters', handleReset);
+  }, [fetchCategories]);
+
+  // Keep Render backend warm — ping every 13 minutes to prevent cold starts
+  useEffect(() => {
+    const keepAlive = setInterval(() => {
+      api.get('/ping').catch(() => {}); // silent lightweight ping
+    }, 13 * 60 * 1000); // 13 minutes
+    return () => clearInterval(keepAlive);
   }, []);
 
   useEffect(() => {
     fetchCards();
   }, [fetchCards]);
+
 
   // Category selection handlers
   const handleSelectCategory = (catId) => {
