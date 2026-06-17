@@ -46,41 +46,41 @@ function App() {
     if (authChecking) return;
 
     const syncRouteWithUrl = () => {
-      const path = window.location.pathname;
-      if (path === '/admin') {
+      const hash = window.location.hash || '#/';
+      if (hash === '#/admin') {
         if (isAdmin) {
           setCurrentView('admin');
-          window.history.replaceState(null, '', '/admin/dashboard');
+          window.location.hash = '#/admin/dashboard';
         } else {
           setCurrentView('login');
         }
-      } else if (path === '/admin/dashboard') {
+      } else if (hash === '#/admin/dashboard') {
         if (isAdmin) {
           setCurrentView('admin');
         } else {
           setCurrentView('login');
-          window.history.replaceState(null, '', '/admin');
+          window.location.hash = '#/admin';
         }
       } else {
         setCurrentView('home');
-        if (path !== '/') {
-          window.history.replaceState(null, '', '/');
+        if (hash !== '#/' && hash !== '') {
+          window.location.hash = '#/';
         }
       }
     };
 
     syncRouteWithUrl();
 
-    // Listen for back/forward browser navigation
-    window.addEventListener('popstate', syncRouteWithUrl);
-    return () => window.removeEventListener('popstate', syncRouteWithUrl);
+    // Listen for back/forward browser navigation and hash changes
+    window.addEventListener('hashchange', syncRouteWithUrl);
+    return () => window.removeEventListener('hashchange', syncRouteWithUrl);
   }, [authChecking, isAdmin]);
 
   const handleLoginSuccess = (admin) => {
     setIsAdmin(true);
     setAdminUser(admin);
     setCurrentView('admin');
-    window.history.pushState(null, '', '/admin/dashboard');
+    window.location.hash = '#/admin/dashboard';
   };
 
   const handleLogout = () => {
@@ -89,29 +89,29 @@ function App() {
     setIsAdmin(false);
     setAdminUser(null);
     setCurrentView('home');
-    window.history.pushState(null, '', '/');
+    window.location.hash = '#/';
   };
 
   const handleViewChange = (view) => {
     if (view === 'admin') {
       if (!isAdmin) {
         setCurrentView('login');
-        window.history.pushState(null, '', '/admin');
+        window.location.hash = '#/admin';
       } else {
         setCurrentView('admin');
-        window.history.pushState(null, '', '/admin/dashboard');
+        window.location.hash = '#/admin/dashboard';
       }
     } else if (view === 'login') {
       if (isAdmin) {
         setCurrentView('admin');
-        window.history.pushState(null, '', '/admin/dashboard');
+        window.location.hash = '#/admin/dashboard';
       } else {
         setCurrentView('login');
-        window.history.pushState(null, '', '/admin');
+        window.location.hash = '#/admin';
       }
     } else {
       setCurrentView('home');
-      window.history.pushState(null, '', '/');
+      window.location.hash = '#/';
     }
   };
 
