@@ -146,7 +146,7 @@ export default function AdminDashboard() {
   const metrics = {
     totalCards: cards.length,
     activeCards: cards.filter(c => c.isActive).length,
-    totalCategories: categories.length,
+    totalCategories: categories.filter(c => c.type === 'category').length,
     avgRating: cards.length > 0 
       ? (cards.reduce((sum, c) => sum + (c.rating?.average || 0), 0) / cards.length).toFixed(1) 
       : '0.0'
@@ -495,7 +495,7 @@ export default function AdminDashboard() {
             <FolderTree size={20} />
           </div>
           <div className="text-left">
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Categories Total</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Main Categories</h3>
             <div className="text-xl font-extrabold text-slate-800 tracking-tight font-display">{metrics.totalCategories}</div>
           </div>
         </div>
