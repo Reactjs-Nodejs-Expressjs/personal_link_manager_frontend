@@ -197,7 +197,7 @@ export default function AdminDashboard() {
         subCategoryId: card.subCategoryId,
         subSubCategoryId: card.subSubCategoryId,
         websiteUrl: card.websiteUrl,
-        websiteIframe: card.websiteIframe || card.websiteUrl,
+        websiteIframe: card.websiteIframe && card.websiteIframe !== card.websiteUrl ? card.websiteIframe : '',
         price: card.price !== null && card.price !== undefined ? card.price : '',
         currency: card.currency || 'USD',
         ratingAvg: card.rating?.average?.toString() || '0',
