@@ -3,8 +3,56 @@ import api from '../api';
 import { 
   LayoutDashboard, Plus, Edit, Trash2, Search, FolderTree, Database, 
   Upload, Download, AlertTriangle, X, Check, Star, CheckCircle, 
-  ExternalLink, Eye, EyeOff, BarChart2, Hash
+  ExternalLink, Eye, EyeOff, BarChart2, Hash, AlertCircle, Loader2
 } from 'lucide-react';
+
+// ── Reusable Delete Confirmation Modal ──────────────────────────────────────
+function DeleteConfirmModal({ open, title, description, onConfirm, onCancel, loading }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[2000] flex justify-center items-center p-4">
+      <div className="max-w-[420px] w-full bg-white border border-slate-100 rounded-3xl shadow-2xl p-6 flex flex-col gap-5 animate-[modalSlideUp_0.2s_ease]">
+        {/* Icon + Header */}
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="w-14 h-14 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-500">
+            <Trash2 size={26} />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-slate-800 font-display">{title}</h3>
+            <p className="text-xs text-slate-400 leading-relaxed mt-1.5 px-2">{description}</p>
+          </div>
+        </div>
+
+        {/* Warning box */}
+        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700 font-medium">
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+          <span>This action <strong>cannot be undone</strong>. The data will be permanently removed.</span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2.5 justify-end pt-1 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="px-5 py-2.5 border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition-all font-semibold text-xs cursor-pointer disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-md transition-all font-semibold text-xs cursor-pointer disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {loading ? 'Deleting...' : 'Yes, Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview'); // overview, cards, categories, backup
@@ -24,8 +72,18 @@ export default function AdminDashboard() {
 
   // Modals & Forms States
   const [cardModal, setCardModal] = useState({ open: false, mode: 'create', data: null });
-  const [catModal, setCatModal] = useState({ open: false, parentNode: null });
-  
+  const [catModal, setCatModal] = useState({ open: false, mode: 'create', parentNode: null, data: null });
+
+  // Delete Confirmation Modal State
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    type: null,       // 'card' | 'category'
+    id: null,
+    title: '',
+    description: '',
+    loading: false
+  });
+
   // Card Form State
   const [cardForm, setCardForm] = useState({
     title: '',
@@ -48,6 +106,10 @@ export default function AdminDashboard() {
     type: 'category', // category, subcategory, subsubcategory
     parentId: ''
   });
+
+  // Save card modal loading
+  const [savingCard, setSavingCard] = useState(false);
+  const [savingCat, setSavingCat] = useState(false);
 
   // Backup JSON Input State
   const [importJson, setImportJson] = useState('');
@@ -163,8 +225,8 @@ export default function AdminDashboard() {
       title,
       description,
       categoryId,
-      subCategoryId,
-      subSubCategoryId,
+      subCategoryId: subCategoryId || null,
+      subSubCategoryId: subSubCategoryId || null,
       websiteUrl,
       websiteIframe: websiteIframe || websiteUrl,
       price: price === '' ? null : Number(price),
@@ -176,6 +238,7 @@ export default function AdminDashboard() {
       isActive
     };
 
+    setSavingCard(true);
     try {
       if (cardModal.mode === 'create') {
         await api.post('/cards', payload);
@@ -187,53 +250,90 @@ export default function AdminDashboard() {
       setCardModal({ open: false, mode: 'create', data: null });
       loadData();
     } catch (err) {
-      triggerAlert('error', err.response?.data?.message || 'Error saving tool card.');
+      triggerAlert('error', err.response?.data?.message || 'Error saving tool card. Check your login session.');
+      console.error('[SaveCard]', err.response?.status, err.response?.data);
+    } finally {
+      setSavingCard(false);
     }
   };
 
-  // Delete Card Handler
-  const handleDeleteCard = async (cardId) => {
-    if (!window.confirm('Are you sure you want to delete this tool card?')) return;
+  // ── Open Delete Modal (Card) ─────────────────────────────────────────────
+  const confirmDeleteCard = (card) => {
+    setDeleteModal({
+      open: true,
+      type: 'card',
+      id: card._id,
+      title: `Delete "${card.title}"?`,
+      description: `This will permanently delete the tool card "${card.title}" from the database.`,
+      loading: false
+    });
+  };
+
+  // ── Open Delete Modal (Category) ─────────────────────────────────────────
+  const confirmDeleteCategory = (cat) => {
+    setDeleteModal({
+      open: true,
+      type: 'category',
+      id: cat._id,
+      title: `Delete "${cat.name}"?`,
+      description: `This will permanently delete the ${cat.type} "${cat.name}" and ALL of its child categories. Cards in these categories will lose their category reference.`,
+      loading: false
+    });
+  };
+
+  // ── Execute Delete ────────────────────────────────────────────────────────
+  const handleConfirmDelete = async () => {
+    setDeleteModal(prev => ({ ...prev, loading: true }));
     try {
-      await api.delete(`/cards/${cardId}`);
-      triggerAlert('success', 'Card deleted successfully.');
+      if (deleteModal.type === 'card') {
+        await api.delete(`/cards/${deleteModal.id}`);
+        triggerAlert('success', 'Card deleted successfully.');
+      } else {
+        await api.delete(`/categories/${deleteModal.id}`);
+        triggerAlert('success', 'Category deleted successfully.');
+      }
+      setDeleteModal({ open: false, type: null, id: null, title: '', description: '', loading: false });
       loadData();
     } catch (err) {
-      triggerAlert('error', 'Error deleting card.');
+      triggerAlert('error', err.response?.data?.message || `Error deleting ${deleteModal.type}.`);
+      console.error('[Delete]', err.response?.status, err.response?.data);
+      setDeleteModal(prev => ({ ...prev, loading: false }));
     }
   };
 
-  // Add Category Handler
-  const handleAddCategory = async (e) => {
+  const closeDeleteModal = () => {
+    if (deleteModal.loading) return;
+    setDeleteModal({ open: false, type: null, id: null, title: '', description: '', loading: false });
+  };
+
+  // Save Category Handler (Create or Edit)
+  const handleSaveCategory = async (e) => {
     e.preventDefault();
     if (!catForm.name) return;
-
+    setSavingCat(true);
     try {
-      await api.post('/categories', {
-        name: catForm.name,
-        type: catForm.type,
-        parentId: catForm.parentId || null
-      });
-      triggerAlert('success', `Created ${catForm.type} "${catForm.name}" successfully.`);
-      setCatModal({ open: false, parentNode: null });
+      if (catModal.mode === 'create') {
+        await api.post('/categories', {
+          name: catForm.name,
+          type: catForm.type,
+          parentId: catForm.parentId || null
+        });
+        triggerAlert('success', `Created ${catForm.type} "${catForm.name}" successfully.`);
+      } else {
+        await api.put(`/categories/${catModal.data._id}`, {
+          name: catForm.name,
+          type: catForm.type,
+          parentId: catForm.parentId || null
+        });
+        triggerAlert('success', `Updated category "${catForm.name}" successfully.`);
+      }
+      setCatModal({ open: false, mode: 'create', parentNode: null, data: null });
       setCatForm({ name: '', type: 'category', parentId: '' });
       loadData();
     } catch (err) {
-      triggerAlert('error', err.response?.data?.message || 'Error creating category node.');
-    }
-  };
-
-  // Delete Category Handler
-  const handleDeleteCategory = async (catId) => {
-    const warningText = 'WARNING: Deleting a category will recursively delete ALL of its child subcategories and sub-subcategories! Cards belonging to these categories will remain but their category reference will need updating.\n\nAre you sure you want to proceed?';
-    if (!window.confirm(warningText)) return;
-
-    try {
-      await api.delete(`/categories/${catId}`);
-      triggerAlert('success', 'Category tree node deleted successfully.');
-      loadData();
-    } catch (err) {
-      triggerAlert('error', 'Error deleting category node.');
+      triggerAlert('error', err.response?.data?.message || 'Error saving category node.');
+    } finally {
+      setSavingCat(false);
     }
   };
 
@@ -260,14 +360,10 @@ export default function AdminDashboard() {
   const handleImportData = async (e) => {
     e.preventDefault();
     if (!importJson.trim()) return;
-
     try {
       const parsed = JSON.parse(importJson);
-      const res = await api.post('/cards/bulk', {
-        action: 'import',
-        cards: parsed
-      });
-      triggerAlert('success', `Import report: ${res.data.importedCount} successfully imported. ${res.data.errorsCount} errors.`);
+      const res = await api.post('/cards/bulk', { action: 'import', cards: parsed });
+      triggerAlert('success', `Import: ${res.data.importedCount} imported, ${res.data.errorsCount} errors.`);
       setImportJson('');
       loadData();
     } catch (err) {
@@ -275,11 +371,10 @@ export default function AdminDashboard() {
     }
   };
 
-  // Category Tree UI Renderer (Tailwind CSS recursive builder)
+  // Category Tree UI Renderer
   const renderCategoryTreeNode = (node, depth = 0) => {
     const children = categories.filter(c => c.parentId === node._id);
     
-    // Type visual badge styles mapping
     const badgeColors = node.type === 'category' 
       ? 'bg-blue-50 text-blue-600 border border-blue-100'
       : node.type === 'subcategory'
@@ -294,18 +389,24 @@ export default function AdminDashboard() {
             <span className="font-semibold text-slate-700">{node.name}</span>
           </div>
           <div className="flex gap-1.5">
+            <button 
+              className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              title={`Edit Category`}
+              onClick={() => {
+                setCatForm({ name: node.name, type: node.type, parentId: node.parentId || '' });
+                setCatModal({ open: true, mode: 'edit', parentNode: null, data: node });
+              }}
+            >
+              <Edit size={14} />
+            </button>
             {node.type !== 'subsubcategory' && (
               <button 
                 className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                 title={`Add Child to ${node.name}`}
                 onClick={() => {
                   const childType = node.type === 'category' ? 'subcategory' : 'subsubcategory';
-                  setCatForm({
-                    name: '',
-                    type: childType,
-                    parentId: node._id
-                  });
-                  setCatModal({ open: true, parentNode: node });
+                  setCatForm({ name: '', type: childType, parentId: node._id });
+                  setCatModal({ open: true, mode: 'create', parentNode: node, data: null });
                 }}
               >
                 <Plus size={14} />
@@ -314,7 +415,7 @@ export default function AdminDashboard() {
             <button 
               className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors cursor-pointer"
               title="Delete node & children"
-              onClick={() => handleDeleteCategory(node._id)}
+              onClick={() => confirmDeleteCategory(node)}
             >
               <Trash2 size={14} />
             </button>
@@ -337,25 +438,30 @@ export default function AdminDashboard() {
   }).sort((a, b) => {
     let aVal = a[sortField];
     let bVal = b[sortField];
-
     if (sortField === 'rating') {
       aVal = a.rating?.average || 0;
       bVal = b.rating?.average || 0;
     }
-
     if (typeof aVal === 'string') {
-      return sortOrder === 'asc' 
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
+      return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     } else {
-      return sortOrder === 'asc' 
-        ? (aVal || 0) - (bVal || 0)
-        : (bVal || 0) - (aVal || 0);
+      return sortOrder === 'asc' ? (aVal || 0) - (bVal || 0) : (bVal || 0) - (aVal || 0);
     }
   });
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto">
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModal.open}
+        title={deleteModal.title}
+        description={deleteModal.description}
+        onConfirm={handleConfirmDelete}
+        onCancel={closeDeleteModal}
+        loading={deleteModal.loading}
+      />
+
       {/* Page Header */}
       <div className="pb-5 border-b border-slate-100 flex flex-col gap-1 text-left">
         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight font-display">🔧 System Admin Panel</h2>
@@ -425,30 +531,19 @@ export default function AdminDashboard() {
         <aside className="w-full lg:w-[240px] shrink-0 text-left">
           <div className="bg-white border border-slate-100 rounded-3xl p-3 shadow-sm flex flex-col gap-1">
             <ul className="flex flex-col gap-1">
-              <li className={`rounded-xl overflow-hidden ${activeTab === 'overview' ? 'bg-[#f97316]/10 text-[#f97316] font-bold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
-                <button className="flex items-center gap-2.5 w-full px-4 py-3 text-xs font-bold text-left cursor-pointer" onClick={() => setActiveTab('overview')}>
-                  <LayoutDashboard size={16} />
-                  <span>Welcome Summary</span>
-                </button>
-              </li>
-              <li className={`rounded-xl overflow-hidden ${activeTab === 'cards' ? 'bg-[#f97316]/10 text-[#f97316] font-bold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
-                <button className="flex items-center gap-2.5 w-full px-4 py-3 text-xs font-bold text-left cursor-pointer" onClick={() => setActiveTab('cards')}>
-                  <BarChart2 size={16} />
-                  <span>Card Management</span>
-                </button>
-              </li>
-              <li className={`rounded-xl overflow-hidden ${activeTab === 'categories' ? 'bg-[#f97316]/10 text-[#f97316] font-bold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
-                <button className="flex items-center gap-2.5 w-full px-4 py-3 text-xs font-bold text-left cursor-pointer" onClick={() => setActiveTab('categories')}>
-                  <FolderTree size={16} />
-                  <span>Category Editor</span>
-                </button>
-              </li>
-              <li className={`rounded-xl overflow-hidden ${activeTab === 'backup' ? 'bg-[#f97316]/10 text-[#f97316] font-bold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
-                <button className="flex items-center gap-2.5 w-full px-4 py-3 text-xs font-bold text-left cursor-pointer" onClick={() => setActiveTab('backup')}>
-                  <Database size={16} />
-                  <span>Backup & Restore</span>
-                </button>
-              </li>
+              {[
+                { id: 'overview', label: 'Welcome Summary', icon: <LayoutDashboard size={16} /> },
+                { id: 'cards', label: 'Card Management', icon: <BarChart2 size={16} /> },
+                { id: 'categories', label: 'Category Editor', icon: <FolderTree size={16} /> },
+                { id: 'backup', label: 'Backup & Restore', icon: <Database size={16} /> },
+              ].map(tab => (
+                <li key={tab.id} className={`rounded-xl overflow-hidden ${activeTab === tab.id ? 'bg-[#f97316]/10 text-[#f97316] font-bold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
+                  <button className="flex items-center gap-2.5 w-full px-4 py-3 text-xs font-bold text-left cursor-pointer" onClick={() => setActiveTab(tab.id)}>
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
         </aside>
@@ -465,18 +560,16 @@ export default function AdminDashboard() {
                 This workspace allows you to configure hierarchical tool directories and cards loaded with iframe references. Use the left menu to start:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 text-left">
-                  <h4 className="text-xs font-bold text-slate-800 mb-2 font-display">📂 Category Editor</h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">Configure root categories and parent nesting structures up to 3 levels deep.</p>
-                </div>
-                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 text-left">
-                  <h4 className="text-xs font-bold text-slate-800 mb-2 font-display">📋 Card Manager</h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">Create, edit, toggle active statuses, adjust pricing details, or write manual star ratings.</p>
-                </div>
-                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 text-left">
-                  <h4 className="text-xs font-bold text-slate-800 mb-2 font-display">📥 DB Backup</h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">Download full databases to single JSON formats, or upload them to overwrite tables.</p>
-                </div>
+                {[
+                  { icon: '📂', title: 'Category Editor', desc: 'Configure root categories and parent nesting structures up to 3 levels deep.' },
+                  { icon: '📋', title: 'Card Manager', desc: 'Create, edit, toggle active statuses, adjust pricing details, or write manual star ratings.' },
+                  { icon: '📥', title: 'DB Backup', desc: 'Download full databases to single JSON formats, or upload them to overwrite tables.' },
+                ].map(item => (
+                  <div key={item.title} className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 text-left">
+                    <h4 className="text-xs font-bold text-slate-800 mb-2 font-display">{item.icon} {item.title}</h4>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">{item.desc}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -569,12 +662,19 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCards.length > 0 ? (
+                    {loading ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-10 text-slate-400 text-xs font-semibold">
+                          <Loader2 size={20} className="animate-spin mx-auto mb-2" />
+                          Loading cards...
+                        </td>
+                      </tr>
+                    ) : filteredCards.length > 0 ? (
                       filteredCards.map(card => (
                         <tr key={card._id} className="border-b border-slate-50 hover:bg-slate-50/40 transition-colors">
-                          <td className="px-4 py-4 font-bold text-slate-800">{card.title}</td>
+                          <td className="px-4 py-4 font-bold text-slate-800 max-w-[200px] truncate">{card.title}</td>
                           <td className="px-4 py-4 text-[11px] text-slate-400 leading-normal">
-                            {card.categoryName} → {card.subCategoryName} → {card.subSubCategoryName}
+                            {[card.categoryName, card.subCategoryName, card.subSubCategoryName].filter(Boolean).join(' → ') || '—'}
                           </td>
                           <td className="px-4 py-4 text-slate-700">
                             <div className="flex items-center gap-1">
@@ -591,11 +691,19 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex gap-2">
-                              <button onClick={() => openCardEditModal('edit', card)} className="text-blue-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 cursor-pointer" title="Edit Card">
-                                <Edit size={16} />
+                              <button 
+                                onClick={() => openCardEditModal('edit', card)} 
+                                className="text-blue-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors" 
+                                title="Edit Card"
+                              >
+                                <Edit size={15} />
                               </button>
-                              <button onClick={() => handleDeleteCard(card._id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-slate-100 cursor-pointer" title="Delete Card">
-                                <Trash2 size={16} />
+                              <button 
+                                onClick={() => confirmDeleteCard(card)} 
+                                className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 cursor-pointer transition-colors" 
+                                title="Delete Card"
+                              >
+                                <Trash2 size={15} />
                               </button>
                             </div>
                           </td>
@@ -623,7 +731,7 @@ export default function AdminDashboard() {
                   className="flex items-center gap-2 px-5 py-2.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg shadow-sm hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer" 
                   onClick={() => {
                     setCatForm({ name: '', type: 'category', parentId: '' });
-                    setCatModal({ open: true, parentNode: null });
+                    setCatModal({ open: true, mode: 'create', parentNode: null, data: null });
                   }}
                 >
                   <Plus size={16} />
@@ -652,7 +760,7 @@ export default function AdminDashboard() {
                 <div className="border-b border-slate-100 pb-6 text-left">
                   <h4 className="text-sm font-bold text-slate-800 mb-1.5 font-display">Export Case Cards Database</h4>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                    Download all configured tool cards as a single formatted JSON file. Keep this as a local backup copy or share it with other systems.
+                    Download all configured tool cards as a single formatted JSON file.
                   </p>
                   <button 
                     className="flex items-center gap-2 px-5 py-2.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg shadow-sm hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer" 
@@ -666,11 +774,11 @@ export default function AdminDashboard() {
                 <div className="text-left">
                   <h4 className="text-sm font-bold text-slate-800 mb-1.5 font-display">Import Case Cards JSON</h4>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                    Paste a JSON array of tool cards. Missing parameters will be auto-generated. This action will add new card entries.
+                    Paste a JSON array of tool cards. Missing parameters will be auto-generated. This adds new entries.
                   </p>
                   <form onSubmit={handleImportData} className="flex flex-col gap-4">
                     <textarea
-                      placeholder='[\n  {\n    "title": "New Tool Case",\n    "description": "Short description...",\n    "categoryId": "24_char_cat_hex_id",\n    "subCategoryId": "24_char_subcat_hex_id",\n    "subSubCategoryId": "24_char_subsubcat_hex_id",\n    "websiteUrl": "https://example.com"\n  }\n]'
+                      placeholder={'[\n  {\n    "title": "New Tool Case",\n    "description": "Short description...",\n    "categoryId": "24_char_cat_hex_id",\n    "websiteUrl": "https://example.com"\n  }\n]'}
                       rows="8"
                       value={importJson}
                       onChange={(e) => setImportJson(e.target.value)}
@@ -697,7 +805,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex justify-center items-center p-4">
           <div className="max-w-2xl w-full bg-white border border-slate-100 rounded-3xl shadow-2xl p-6 md:p-8 flex flex-col max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
-              <h3 className="text-base font-bold text-slate-800 font-display">{cardModal.mode === 'create' ? 'Create New Tool Case' : 'Edit Tool Case'}</h3>
+              <h3 className="text-base font-bold text-slate-800 font-display">{cardModal.mode === 'create' ? 'Create New Tool Case' : `Edit: ${cardModal.data?.title}`}</h3>
               <button 
                 onClick={() => setCardModal({ open: false, mode: 'create', data: null })} 
                 className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -801,6 +909,33 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex flex-col text-left gap-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={cardForm.price}
+                    onChange={(e) => setCardForm(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="Leave blank if no price"
+                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-[#f97316] focus:ring-4 focus:ring-[#f97316]/10 outline-none transition-all text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col text-left gap-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Currency</label>
+                  <select 
+                    value={cardForm.currency} 
+                    onChange={(e) => setCardForm(prev => ({ ...prev, currency: e.target.value }))}
+                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-[#f97316] focus:ring-4 focus:ring-[#f97316]/10 outline-none transition-all text-sm cursor-pointer"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="INR">INR</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col text-left gap-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Star Rating (0.0 to 5.0)</label>
                   <input
                     type="number"
@@ -841,14 +976,17 @@ export default function AdminDashboard() {
                   type="button" 
                   className="flex items-center justify-center gap-1.5 px-5 py-3 border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition-all font-semibold text-xs cursor-pointer" 
                   onClick={() => setCardModal({ open: false, mode: 'create', data: null })}
+                  disabled={savingCard}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex items-center justify-center gap-1.5 px-5 py-3 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl shadow-md hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer"
+                  disabled={savingCard}
+                  className="flex items-center justify-center gap-1.5 px-5 py-3 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl shadow-md hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer disabled:opacity-60"
                 >
-                  {cardModal.mode === 'create' ? 'Create Card' : 'Save Changes'}
+                  {savingCard ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {savingCard ? 'Saving...' : cardModal.mode === 'create' ? 'Create Card' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -856,22 +994,24 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* MODAL 2: Category Editor Child Adder Modal */}
+      {/* MODAL 2: Category Editor Modal */}
       {catModal.open && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex justify-center items-center p-4">
           <div className="max-w-[450px] w-full bg-white border border-slate-100 rounded-3xl shadow-2xl p-6 md:p-8 flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
-              <h3 className="text-base font-bold text-slate-800 font-display">Create {catForm.type}</h3>
+              <h3 className="text-base font-bold text-slate-800 font-display">
+                {catModal.mode === 'create' ? `Create ${catForm.type}` : `Edit ${catForm.type}`}
+              </h3>
               <button 
-                onClick={() => setCatModal({ open: false, parentNode: null })} 
+                onClick={() => setCatModal({ open: false, mode: 'create', parentNode: null, data: null })} 
                 className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleAddCategory} className="flex flex-col text-left">
-              {catModal.parentNode && (
+            <form onSubmit={handleSaveCategory} className="flex flex-col text-left">
+              {catModal.mode === 'create' && catModal.parentNode && (
                 <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-500 mb-5 leading-normal">
                   Adding nested item inside: <strong className="text-slate-800">{catModal.parentNode.name}</strong> ({catModal.parentNode.type})
                 </div>
@@ -894,15 +1034,18 @@ export default function AdminDashboard() {
                 <button 
                   type="button" 
                   className="flex items-center justify-center gap-1.5 px-5 py-3 border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition-all font-semibold text-xs cursor-pointer" 
-                  onClick={() => setCatModal({ open: false, parentNode: null })}
+                  onClick={() => setCatModal({ open: false, mode: 'create', parentNode: null, data: null })}
+                  disabled={savingCat}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex items-center justify-center gap-1.5 px-5 py-3 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl shadow-md hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer"
+                  disabled={savingCat}
+                  className="flex items-center justify-center gap-1.5 px-5 py-3 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl shadow-md hover:shadow-[#f97316]/20 transition-all font-semibold text-xs cursor-pointer disabled:opacity-60"
                 >
-                  Create Category
+                  {savingCat ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {savingCat ? 'Saving...' : catModal.mode === 'create' ? 'Create Category' : 'Save Changes'}
                 </button>
               </div>
             </form>
