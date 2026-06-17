@@ -34,6 +34,26 @@ export default function Home() {
   const [favorites, setFavorites] = useState(() => JSON.parse(localStorage.getItem('toolcase_favorites') || '[]'));
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
+  // Sync favorites with the database on mount and when showFavoritesOnly filter changes
+  useEffect(() => {
+    const syncFavorites = async () => {
+      try {
+        const res = await api.get('/cards?limit=10000&showInactive=false');
+        const activeIds = new Set((res.data.cards || []).map(c => c._id));
+        setFavorites(prev => {
+          const cleaned = prev.filter(id => activeIds.has(id));
+          if (cleaned.length !== prev.length) {
+            localStorage.setItem('toolcase_favorites', JSON.stringify(cleaned));
+          }
+          return cleaned;
+        });
+      } catch (err) {
+        console.warn('Could not sync favorites with database:', err);
+      }
+    };
+    syncFavorites();
+  }, [showFavoritesOnly]);
+
   // Fetch all categories once
   const fetchCategories = useCallback(async () => {
     try {
