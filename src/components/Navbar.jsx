@@ -133,12 +133,12 @@ export default function Navbar({ isAdmin, onLogout, currentView, onViewChange })
               <span>Admin Panel</span>
             </button>
           ) : (
-            <button 
-              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border border-slate-900 text-white rounded-lg hover:bg-white hover:text-slate-900 hover:border-slate-900 transition-all shadow-sm font-medium text-xs"
-              onClick={() => alert('Lets Talk - Framer CTA mockup.')}
+            <a 
+              href="tel:+919121751697"
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border border-slate-900 text-white rounded-lg hover:bg-white hover:text-slate-900 hover:border-slate-900 transition-all shadow-sm font-medium text-xs no-underline"
             >
               Lets Talk
-            </button>
+            </a>
           )}
 
           {isAdmin ? (
@@ -212,12 +212,13 @@ export default function Navbar({ isAdmin, onLogout, currentView, onViewChange })
                 <span>Admin Panel</span>
               </button>
             ) : (
-              <button 
-                className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 border border-slate-900 text-white rounded-lg hover:bg-white hover:text-slate-900 hover:border-slate-900 transition-all shadow-sm font-medium text-sm w-full"
-                onClick={() => { setMobileOpen(false); alert('Lets Talk - Framer CTA mockup.'); }}
+              <a 
+                href="tel:+919121751697"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 border border-slate-900 text-white rounded-lg hover:bg-white hover:text-slate-900 hover:border-slate-900 transition-all shadow-sm font-medium text-sm w-full no-underline"
               >
                 Lets Talk
-              </button>
+              </a>
             )}
 
             {isAdmin ? (
