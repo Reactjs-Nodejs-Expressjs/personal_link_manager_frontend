@@ -16,6 +16,7 @@ export default function AdminLogin({ onLoginSuccess }) {
   const [otpRequired, setOtpRequired] = useState(false);
   const [otp, setOtp]           = useState('');
   const [resendTimer, setResendTimer] = useState(0);
+  const [emailDelivered, setEmailDelivered] = useState(true);
 
   // Password flow
   const [password, setPassword]     = useState('');
@@ -48,6 +49,7 @@ export default function AdminLogin({ onLoginSuccess }) {
       const res = await api.post('/auth/login', { email });
       if (res.data.otpRequired) {
         setOtpRequired(true);
+        setEmailDelivered(res.data.emailDelivered !== false);
         setMessage(res.data.message);
         setResendTimer(30);
       }
@@ -82,6 +84,7 @@ export default function AdminLogin({ onLoginSuccess }) {
     setLoading(true); setError(''); setMessage('');
     try {
       const res = await api.post('/auth/login', { email });
+      setEmailDelivered(res.data.emailDelivered !== false);
       setMessage(res.data.message);
       setOtp('');
       setResendTimer(30);
@@ -278,7 +281,13 @@ export default function AdminLogin({ onLoginSuccess }) {
               </div>
             )}
 
-            {message && (
+            {!emailDelivered && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-medium text-amber-700 mb-4 text-left">
+                ⚠️ Email delivery failed on the server. Check Render logs for the OTP code, or go back and use <strong>Password login</strong>.
+              </div>
+            )}
+
+            {message && emailDelivered && (
               <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-medium text-emerald-600 mb-5 text-left">
                 {message}
               </div>
